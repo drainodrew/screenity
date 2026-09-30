@@ -1,4 +1,6 @@
 import { initializeListeners } from "./listeners";
+import { initializeLibraryQueue } from "./drive/libraryQueue";
+
 import { setupHandlers } from "./messaging/handlers";
 import {
   messageRouter,
@@ -15,6 +17,8 @@ import {
 } from "../CloudRecorder/recorderStorage/opfsKvStore";
 import { handleGetStreamingData } from "./recording/recordingHelpers";
 import { initUninstallSurvey } from "./utils/uninstallSurvey";
+
+initializeLibraryQueue();
 
 // Don't tear down an in-flight start on SW restart: a fresh start is
 // mid-setup (recorder tab not loaded yet), not dead. Mirrors the alarm
@@ -429,4 +433,3 @@ try {
     chrome.storage.local.set({ swLastSeenAt: Date.now() }).catch(() => {});
   });
 } catch {}
-

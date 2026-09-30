@@ -7,6 +7,24 @@ const HtmlWebpackPlugin = require("html-webpack-plugin");
 const TerserPlugin = require("terser-webpack-plugin");
 
 const isDev = env.NODE_ENV === "development";
+const libraryLocalPath = path.join(__dirname, "integration.config.local.json");
+const libraryLocalInput = fileSystem.existsSync(libraryLocalPath)
+  ? JSON.parse(fileSystem.readFileSync(libraryLocalPath, "utf8"))
+  : null;
+const libraryLocal = libraryLocalInput?.oauthClientId ? libraryLocalInput : null;
+if (libraryLocal) {
+  for (const field of ["rootFolderId", "inboxFolderId", "extensionPublicKey"]) {
+    if (!libraryLocal[field]) throw new Error(`Missing library setting: ${field}`);
+  }
+  const generated = path.join(__dirname, "src/pages/Background/drive/libraryConfig.local.json");
+  if (!fileSystem.existsSync(generated)) throw new Error("Run node integration/scripts/configure.mjs before building the library.");
+  const folders = JSON.parse(fileSystem.readFileSync(generated, "utf8"));
+  if (!folders.enabled || folders.rootFolderId !== libraryLocal.rootFolderId || folders.inboxFolderId !== libraryLocal.inboxFolderId) {
+    throw new Error("Library folders changed; run node integration/scripts/configure.mjs again.");
+  }
+} else if (libraryLocalInput) {
+  console.warn("[screenity] Own Google OAuth client is missing. Library integration is disabled in this build.");
+}
 
 // SCREENITY_BS_BUILD=1: slim build for BrowserStack inline-CRX size limit.
 // drops post-recording UI + WASM. recording + camera paths preserved.
@@ -274,6 +292,7 @@ const config = {
   },
   resolve: {
     alias: {
+      "screenity-library-config": path.join(__dirname, "src/pages/Background/drive", libraryLocal ? "libraryConfig.local.json" : "libraryConfig.json"),
       react: path.resolve("./node_modules/react"),
       "react-dom": path.resolve("./node_modules/react-dom"),
       "react/jsx-runtime": path.resolve("./node_modules/react/jsx-runtime"),
@@ -320,6 +339,14 @@ const config = {
               version: process.env.npm_package_version,
               ...JSON.parse(content.toString()),
             };
+            if (libraryLocal) {
+              manifest.name = "Screenity · Jev Library";
+              manifest.key = libraryLocal.extensionPublicKey;
+              manifest.oauth2.client_id = libraryLocal.oauthClientId;
+              manifest.oauth2.scopes = [libraryLocal.driveScope || "https://www.googleapis.com/auth/drive.file"];
+              manifest.permissions = [...new Set([...manifest.permissions, "nativeMessaging", "alarms"])];
+              manifest.optional_permissions = (manifest.optional_permissions || []).filter(p => p !== "alarms");
+            }
 
             // Strip dev-only origins from prod builds. The
             // SCREENITY_USE_LOCAL_ENV escape hatch keeps them in for

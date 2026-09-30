@@ -15,6 +15,11 @@ build/
 *.zip
 *.tsbuildinfo
 .cws-credentials.json
+integration/worker/target/
+integration/native/target/
+integration.config.local.json
+integration/native/*.app/
+src/pages/Background/drive/libraryConfig.local.json
 docs/
 tests/
 test-results/

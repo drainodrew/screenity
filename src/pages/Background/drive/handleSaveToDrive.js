@@ -8,8 +8,27 @@ import {
 import { instanceForSlot } from "../../utils/chunkStores";
 import signIn from "../modules/signIn";
 import { diagEvent } from "../../utils/diagnosticLog";
+import libraryConfig from "screenity-library-config";
+import { enqueueLibraryRecording } from "./libraryQueue";
 
 const findOrCreateScreenityFolder = async (token) => {
+  if (libraryConfig.enabled) {
+    if (!libraryConfig.rootFolderId || !libraryConfig.inboxFolderId) {
+      throw new Error("The Jev library destination has not been configured.");
+    }
+    // Verify the exact configured destination. Never silently create a second
+    // screenrecordings folder when account or folder access is wrong.
+    const response = await fetch(
+      `https://www.googleapis.com/drive/v3/files/${libraryConfig.inboxFolderId}?fields=id,mimeType,parents,trashed`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    if (!response.ok) throw new Error(`Library folder access failed: ${response.status}`);
+    const folder = await response.json();
+    if (folder.trashed || folder.mimeType !== "application/vnd.google-apps.folder" || !folder.parents?.includes(libraryConfig.rootFolderId)) {
+      throw new Error("The configured Inbox is not in the screenrecordings library.");
+    }
+    return libraryConfig.inboxFolderId;
+  }
   const headers = new Headers({
     Authorization: `Bearer ${token}`,
     "Content-Type": "application/json",
@@ -367,6 +386,12 @@ const saveToDrive = async (videoBlob, fileName) => {
     }
 
     diagEvent("drive-upload-ok", { fileId });
+
+    try {
+      await enqueueLibraryRecording(fileId, fileName);
+    } catch {
+      console.warn("[Jev library] Could not queue classification; the recording is saved in Drive.");
+    }
 
     chrome.tabs.create({
       url: `https://drive.google.com/file/d/${fileId}/view`,
